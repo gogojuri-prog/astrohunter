@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>AstroHunter — 銀河獵人</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+TC:wght@300;400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+:root {
+  --gold: #FFD700;
+  --gold-dim: rgba(255,215,0,0.15);
+  --bg: #080c14;
+  --panel: rgba(16,22,36,0.97);
+  --border: rgba(255,255,255,0.08);
+  --text: #e8eaf0;
+  --muted: #667;
+  --green: #00E676;
+  --danger: #FF5252;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { background: var(--bg); color: var(--text); font-family: 'Noto Sans TC', sans-serif; min-height: 100vh; }
+.app { max-width: 480px; margin: 0 auto; padding: 16px; padding-bottom: 48px; }
+
+.header { display: flex; align-items: center; justify-content: space-between; padding: 16px 0 14px; }
+.logo { font-family: 'Space Mono', monospace; font-size: 17px; color: var(--gold); letter-spacing: 2px; }
+.logo span { color: var(--text); opacity: 0.4; }
+.date-badge { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); background: var(--panel); border: 1px solid var(--border); padding: 4px 10px; border-radius: 20px; }
+
+#map-wrap { width: 100%; height: 280px; border-radius: 20px; border: 1px solid var(--border); overflow: hidden; margin-bottom: 10px; }
+#leaflet-map { width: 100%; height: 100%; }
+.leaflet-tile { filter: brightness(0.55) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7) !important; }
+.leaflet-container { background: #0d1420 !important; }
+
+.loc-info { font-size: 11px; color: var(--muted); text-align: center; margin-bottom: 10px; font-family: 'Space Mono', monospace; }
+
+.search-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.search-input { flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 12px 16px; color: var(--text); font-family: 'Noto Sans TC', sans-serif; font-size: 14px; outline: none; -webkit-appearance: none; }
+.search-input:focus { border-color: var(--gold); }
+.search-input::placeholder { color: var(--muted); }
+.btn-gold { background: var(--gold); border: none; border-radius: 14px; padding: 12px 18px; color: #000; font-weight: 700; font-size: 14px; cursor: pointer; font-family: 'Noto Sans TC', sans-serif; white-space: nowrap; -webkit-appearance: none; }
+
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 20px; padding: 16px; margin-bottom: 12px; }
+.panel-title { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; margin-bottom: 14px; }
+
+.compass-wrap { display: flex; align-items: center; gap: 16px; }
+.compass-dial { width: 80px; height: 80px; flex-shrink: 0; }
+.compass-dial svg { width: 100%; height: 100%; }
+.compass-info { flex: 1; min-width: 0; }
+.compass-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.compass-deg { font-family: 'Space Mono', monospace; font-size: 30px; font-weight: 700; line-height: 1; margin-bottom: 10px; transition: color 0.3s; }
+.compass-deg.aligned { color: var(--gold); }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-sm { font-size: 12px; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--border); background: rgba(255,255,255,0.05); color: var(--text); cursor: pointer; font-family: 'Noto Sans TC', sans-serif; -webkit-appearance: none; user-select: none; }
+.btn-sm.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
+
+.manual-wrap { margin-top: 12px; display: none; align-items: center; gap: 8px; flex-wrap: wrap; }
+.manual-wrap.show { display: flex; }
+.manual-wrap input { width: 90px; background: rgba(255,255,255,0.06); border: 1px solid var(--gold); border-radius: 10px; padding: 10px 12px; color: var(--text); font-family: 'Space Mono', monospace; font-size: 16px; outline: none; text-align: center; -webkit-appearance: none; }
+.manual-wrap .unit { font-size: 13px; color: var(--muted); }
+.manual-wrap .btn-apply { background: var(--gold); border: none; border-radius: 10px; padding: 10px 14px; color: #000; font-weight: 700; font-size: 13px; cursor: pointer; font-family: 'Noto Sans TC', sans-serif; -webkit-appearance: none; }
+
+.status-msg { font-size: 11px; margin-top: 8px; padding: 6px 10px; border-radius: 8px; display: none; }
+.status-msg.show { display: block; }
+.status-msg.ok { background: rgba(0,230,118,0.1); color: var(--green); }
+.status-msg.err { background: rgba(255,82,82,0.1); color: var(--danger); }
+
+.align-hint { font-size: 12px; margin-top: 10px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,0.03); color: var(--muted); text-align: center; transition: all 0.3s; }
+.align-hint.on { background: var(--gold-dim); color: var(--gold); }
+
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.stat-card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 14px 8px; text-align: center; }
+.stat-label { font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+.stat-val { font-family: 'Space Mono', monospace; font-size: 19px; font-weight: 700; }
+.stat-val.green { color: var(--green); }
+.stat-val.red { color: var(--danger); }
+.stat-val.gold { color: var(--gold); }
+
+.nav-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 20px; padding: 16px; margin-bottom: 12px; transition: border-color 0.3s, background 0.3s; }
+.nav-panel.aligned { border-color: var(--gold); background: rgba(255,215,0,0.04); }
+.nav-head { display: flex; align-items: center; margin-bottom: 14px; gap: 8px; flex-wrap: wrap; }
+.nav-head-title { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; }
+.bortle { background: var(--gold); color: #000; font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px; }
+.wx-desc { font-size: 11px; color: var(--muted); }
+.nav-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.nav-item { text-align: center; }
+.nav-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+.nav-val { font-family: 'Space Mono', monospace; font-size: 26px; font-weight: 700; transition: color 0.3s; }
+.nav-val.gold { color: var(--gold); }
+
+.moon-bar { background: #0d1228; border: 1px solid rgba(255,215,0,0.2); border-radius: 14px; padding: 12px 16px; margin-bottom: 12px; text-align: center; font-size: 12px; color: var(--gold); font-weight: 700; }
+
+.time-scroll { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 12px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.time-scroll::-webkit-scrollbar { display: none; }
+.time-btn { flex-shrink: 0; padding: 8px 18px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); color: var(--muted); font-family: 'Space Mono', monospace; font-size: 13px; cursor: pointer; -webkit-appearance: none; }
+.time-btn.active { background: var(--gold); color: #000; border-color: var(--gold); font-weight: 700; }
+
+.spots-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.btn-add { font-size: 12px; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--border); background: rgba(255,255,255,0.05); color: var(--text); cursor: pointer; font-family: 'Noto Sans TC', sans-serif; -webkit-appearance: none; }
+.spot-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+.spot-row:last-child { border-bottom: none; }
+.spot-name { font-size: 14px; }
+.spot-coord { font-size: 10px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 2px; }
+.spot-del { color: var(--danger); font-size: 20px; padding: 0 6px; opacity: 0.6; cursor: pointer; flex-shrink: 0; }
+.empty { text-align: center; color: var(--muted); font-size: 13px; padding: 16px 0; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="logo">Astro<span>Hunter</span></div>
+    <div class="date-badge" id="dateBadge">--/--</div>
+  </div>
+
+  <div id="map-wrap"><div id="leaflet-map"></div></div>
+
+  <div class="loc-info" id="locInfo">📍 定位中...</div>
+
+  <div class="search-row">
+    <input class="search-input" id="searchInput" type="text" placeholder="搜尋地點（如：國聖燈塔）" autocomplete="off"/>
+    <button class="btn-gold" id="searchBtn">搜尋</button>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">🧭 手機朝向</div>
+    <div class="compass-wrap">
+      <div class="compass-dial">
+        <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="40" cy="40" r="38" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="2"/>
+          <circle cx="40" cy="40" r="26" fill="none" stroke="rgba(255,215,0,0.12)" stroke-width="1"/>
+          <text x="40" y="10" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="8" font-family="monospace">N</text>
+          <text x="40" y="76" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="8" font-family="monospace">S</text>
+          <text x="73" y="44" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="8" font-family="monospace">E</text>
+          <text x="7"  y="44" text-anchor="middle" fill="rgba(255,255,255,0.25)" font-size="8" font-family="monospace">W</text>
+          <g id="needle">
+            <polygon points="40,13 37,40 40,45 43,40" fill="#FFD700" opacity="0.95"/>
+            <polygon points="40,67 37,40 40,45 43,40" fill="rgba(255,255,255,0.25)"/>
+            <circle cx="40" cy="40" r="3.5" fill="#FFD700"/>
+          </g>
+          <line id="targetLine" x1="40" y1="40" x2="40" y2="16" stroke="#E91E63" stroke-width="2" stroke-dasharray="3,2" opacity="0.75"/>
+        </svg>
+      </div>
+      <div class="compass-info">
+        <div class="compass-label">目前朝向</div>
+        <div class="compass-deg" id="headingDeg">0°</div>
+        <div class="btn-row">
+          <button class="btn-sm" id="autoBtn">📡 自動偵測</button>
+          <button class="btn-sm" id="manualBtn">✏️ 手動輸入</button>
+        </div>
+        <div class="status-msg" id="statusMsg"></div>
+      </div>
+    </div>
+    <div class="manual-wrap" id="manualWrap">
+      <input type="number" id="manualInput" min="0" max="360" placeholder="0~360" inputmode="numeric"/>
+      <span class="unit">度</span>
+      <button class="btn-apply" id="applyBtn">套用</button>
+    </div>
+    <div class="align-hint" id="alignHint">手機對準目標方向後會亮起 ✨</div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-label">☁️ 雲量</div><div class="stat-val" id="cloudVal">--%</div></div>
+    <div class="stat-card"><div class="stat-label">📸 ISO</div><div class="stat-val gold" id="isoVal">--</div></div>
+    <div class="stat-card"><div class="stat-label">⏱️ 快門</div><div class="stat-val gold">15s</div></div>
+  </div>
+
+  <div class="nav-panel" id="navPanel">
+    <div class="nav-head">
+      <span class="nav-head-title">銀河方位</span>
+      <span class="bortle" id="bortleVal">B--</span>
+      <span class="wx-desc" id="wxDesc">--</span>
+    </div>
+    <div class="nav-grid">
+      <div class="nav-item"><div class="nav-label">🎯 目標方位</div><div class="nav-val gold" id="azimuthVal">--°</div></div>
+      <div class="nav-item"><div class="nav-label">📱 手機朝向</div><div class="nav-val" id="headingVal">0°</div></div>
+    </div>
+  </div>
+
+  <div class="moon-bar" id="moonBar">🌓 月落 02:15 | ⏳ 等待銀河核心升起</div>
+  <div class="time-scroll" id="timeScroll"></div>
+
+  <div class="panel">
+    <div class="spots-header">
+      <div class="panel-title" style="margin-bottom:0">⭐ 私藏拍攝點</div>
+      <button class="btn-add" id="addSpotBtn">＋ 儲存目前地點</button>
+    </div>
+    <div id="spotsList"><div class="empty">尚無儲存地點</div></div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const WX_KEY = '8be4d8091871a3962d3989c9e5488f72';
+let userLoc = { lat: 22.997, lon: 120.212 };
+let targetLoc = null;
+let heading = 0;
+let hour = new Date().getHours();
+let wx = { cloud: null, desc: '--' };
+let spots = [];
+let map, userMarker, targetMarker, azLine;
+
+try { spots = JSON.parse(localStorage.getItem('astro_spots') || '[]'); } catch(e) {}
+
+window.addEventListener('load', () => {
+  setDateBadge();
+  buildTimeScroll();
+  renderSpots();
+  initMap();
+  updateAll();
+  getGPS();
+  bindAll();
+});
+
+function setDateBadge() {
+  const n = new Date();
+  document.getElementById('dateBadge').textContent =
+    `${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')} ${hour}:00`;
+}
+
+// ── Map ────────────────────────────────────
+function initMap() {
+  map = L.map('leaflet-map', {
+    center: [userLoc.lat, userLoc.lon], zoom: 11,
+    zoomControl: false, attributionControl: false
+  });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+  userMarker = L.circleMarker([userLoc.lat, userLoc.lon],
+    { radius: 8, fillColor: '#007AFF', color: '#fff', weight: 2, fillOpacity: 1 }).addTo(map);
+  map.on('click', e => { setTarget(e.latlng.lat, e.latlng.lng); fetchWx(e.latlng.lat, e.latlng.lng); });
+}
+
+function setTarget(lat, lon) {
+  targetLoc = { lat, lon };
+  if (targetMarker) map.removeLayer(targetMarker);
+  targetMarker = L.circleMarker([lat, lon],
+    { radius: 8, fillColor: '#FFD700', color: '#000', weight: 2, fillOpacity: 1 }).addTo(map);
+  drawAzLine(); updateAll();
+}
+
+function drawAzLine() {
+  if (azLine) map.removeLayer(azLine);
+  const loc = targetLoc || userLoc;
+  const rad = (calcAz() - 90) * Math.PI / 180;
+  const d = 0.07;
+  azLine = L.polyline(
+    [[loc.lat, loc.lon],[loc.lat - Math.sin(rad)*d, loc.lon + Math.cos(rad)*d]],
+    { color: '#FFD700', weight: 3, dashArray: '10,5', opacity: 0.85 }
+  ).addTo(map);
+}
+
+// ── GPS ────────────────────────────────────
+function getGPS() {
+  if (!navigator.geolocation) { fallbackGPS(); return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    userLoc = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+    document.getElementById('locInfo').textContent =
+      `📍 ${userLoc.lat.toFixed(4)}, ${userLoc.lon.toFixed(4)}`;
+    map.setView([userLoc.lat, userLoc.lon], 11);
+    userMarker.setLatLng([userLoc.lat, userLoc.lon]);
+    fetchWx(userLoc.lat, userLoc.lon);
+    updateAll();
+  }, fallbackGPS, { timeout: 10000 });
+}
+function fallbackGPS() {
+  document.getElementById('locInfo').textContent = '📍 定位失敗，使用預設（台南）';
+  fetchWx(userLoc.lat, userLoc.lon);
+}
+
+// ── Search ─────────────────────────────────
+async function doSearch() {
+  const raw = document.getElementById('searchInput').value.trim();
+  if (!raw) return;
+  let q = raw;
+  if (q.includes('國聖燈塔')) q = '國聖港燈塔';
+  if (q === '武嶺') q = '合歡山武嶺';
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}+Taiwan&format=json&limit=1`,
+      { headers: { 'User-Agent': 'AstroHunter/1.0' } });
+    const d = await r.json();
+    if (d && d.length > 0) {
+      const lat = parseFloat(d[0].lat), lon = parseFloat(d[0].lon);
+      setTarget(lat, lon);
+      map.setView([lat, lon], 14);
+      document.getElementById('locInfo').textContent =
+        `📍 ${d[0].display_name.split(',').slice(0,2).join(',')}`;
+      fetchWx(lat, lon);
+      document.getElementById('searchInput').value = '';
+    } else { alert('找不到地點，請輸入更明確的名稱。'); }
+  } catch(e) { alert('搜尋失敗，請檢查網路連線。'); }
+}
+
+// ── Weather ────────────────────────────────
+async function fetchWx(lat, lon) {
+  try {
+    const r = await fetch(
+      `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${WX_KEY}&units=metric&lang=zh_tw`);
+    const d = await r.json();
+    if (d.main) { wx = { cloud: d.clouds.all, desc: d.weather[0].description }; updateAll(); }
+  } catch(e) {}
+}
+
+// ── Compass ────────────────────────────────
+function bindAll() {
+  document.getElementById('searchBtn').addEventListener('click', doSearch);
+  document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key==='Enter') doSearch(); });
+
+  document.getElementById('autoBtn').addEventListener('click', startCompass);
+
+  document.getElementById('manualBtn').addEventListener('click', () => {
+    const w = document.getElementById('manualWrap');
+    const opening = !w.classList.contains('show');
+    w.classList.toggle('show');
+    if (opening) {
+      document.getElementById('manualBtn').classList.add('active');
+      setTimeout(() => document.getElementById('manualInput').focus(), 100);
+    } else {
+      document.getElementById('manualBtn').classList.remove('active');
+    }
+  });
+
+  document.getElementById('applyBtn').addEventListener('click', applyManual);
+  document.getElementById('manualInput').addEventListener('keydown', e => { if (e.key==='Enter') applyManual(); });
+  document.getElementById('addSpotBtn').addEventListener('click', addSpot);
+}
+
+function applyManual() {
+  const v = parseInt(document.getElementById('manualInput').value);
+  if (isNaN(v)) { showStatus('請輸入 0~360 的數字', 'err'); return; }
+  heading = ((v % 360) + 360) % 360;
+  refreshHeading();
+  showStatus(`✏️ 已設定朝向 ${heading}°`, 'ok');
+}
+
+function startCompass() {
+  if (typeof DeviceOrientationEvent === 'undefined') { showStatus('此裝置不支援感測器', 'err'); return; }
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission()
+      .then(s => { if (s==='granted') listenOrientation(); else showStatus('未授權感測器，請手動輸入', 'err'); })
+      .catch(() => showStatus('無法取得感測器權限', 'err'));
+  } else { listenOrientation(); }
+}
+
+function listenOrientation() {
+  document.getElementById('autoBtn').classList.add('active');
+  showStatus('✅ 感測器啟動，請移動手機', 'ok');
+  window.addEventListener('deviceorientationabsolute', onOrient, true);
+  window.addEventListener('deviceorientation', onOrient, true);
+}
+
+function onOrient(e) {
+  let h = 0;
+  if (e.webkitCompassHeading !== undefined) h = e.webkitCompassHeading;
+  else if (e.alpha !== null) h = (360 - e.alpha) % 360;
+  heading = Math.round(h);
+  refreshHeading();
+}
+
+function showStatus(msg, type) {
+  const el = document.getElementById('statusMsg');
+  el.textContent = msg; el.className = `status-msg show ${type}`;
+}
+
+function refreshHeading() {
+  document.getElementById('headingDeg').textContent = `${heading}°`;
+  document.getElementById('headingVal').textContent = `${heading}°`;
+  document.getElementById('needle').setAttribute('transform', `rotate(${heading},40,40)`);
+  checkAlign();
+}
+
+function updateTargetLine() {
+  const rad = (calcAz() - 90) * Math.PI / 180;
+  const r = 24;
+  document.getElementById('targetLine').setAttribute('x2', 40 + r*Math.cos(rad));
+  document.getElementById('targetLine').setAttribute('y2', 40 + r*Math.sin(rad));
+}
+
+function checkAlign() {
+  const diff = Math.abs(((heading - calcAz() + 540) % 360) - 180);
+  const aligned = diff < 10;
+  const hint = document.getElementById('alignHint');
+  const navPanel = document.getElementById('navPanel');
+  const degEl = document.getElementById('headingDeg');
+  const valEl = document.getElementById('headingVal');
+  if (aligned) {
+    hint.className = 'align-hint on'; hint.textContent = '🎯 對準了！這就是銀河核心方向！';
+    navPanel.classList.add('aligned'); degEl.className = 'compass-deg aligned';
+    valEl.style.color = 'var(--gold)';
+  } else {
+    const turn = ((calcAz() - heading) + 360) % 360;
+    const dir = turn < 180 ? `向右轉 ${Math.round(turn)}°` : `向左轉 ${Math.round(360-turn)}°`;
+    hint.className = 'align-hint'; hint.textContent = `${dir} 對準銀河核心`;
+    navPanel.classList.remove('aligned'); degEl.className = 'compass-deg';
+    valEl.style.color = 'var(--text)';
+  }
+}
+
+function calcAz() { return ((135 + (hour - 23) * 15) % 360 + 360) % 360; }
+function calcBortle() {
+  const loc = targetLoc || userLoc;
+  const d = Math.sqrt((loc.lat-22.997)**2 + (loc.lon-120.212)**2);
+  return d < 0.05 ? 8 : d < 0.25 ? 4 : 2;
+}
+
+function updateAll() {
+  const az = calcAz(), b = calcBortle();
+  document.getElementById('azimuthVal').textContent = `${az}°`;
+  document.getElementById('bortleVal').textContent = `B${b}`;
+  if (wx.cloud !== null) {
+    const el = document.getElementById('cloudVal');
+    el.textContent = `${wx.cloud}%`;
+    el.className = `stat-val ${wx.cloud < 20 ? 'green' : 'red'}`;
+    document.getElementById('wxDesc').textContent = wx.desc;
+  }
+  document.getElementById('isoVal').textContent = b <= 4 ? (hour >= 1 ? '6400' : '3200') : '1600';
+  document.getElementById('moonBar').textContent =
+    `🌓 月落 02:15 | ${hour >= 1 ? '✨ 銀河最佳窗口' : '⏳ 等待核心升起'}`;
+  setDateBadge(); updateTargetLine(); drawAzLine(); checkAlign();
+}
+
+function buildTimeScroll() {
+  const wrap = document.getElementById('timeScroll');
+  [19,21,23,1,3,5].forEach(t => {
+    const b = document.createElement('button');
+    b.className = `time-btn${t===hour?' active':''}`;
+    b.textContent = `${t}:00`;
+    b.addEventListener('click', () => {
+      hour = t;
+      document.querySelectorAll('.time-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active'); updateAll();
+    });
+    wrap.appendChild(b);
+  });
+}
+
+function addSpot() {
+  const loc = targetLoc || userLoc;
+  const name = prompt('輸入秘境名稱：');
+  if (!name || !name.trim()) return;
+  spots.push({ name: name.trim(), lat: loc.lat, lon: loc.lon });
+  try { localStorage.setItem('astro_spots', JSON.stringify(spots)); } catch(e) {}
+  renderSpots();
+}
+
+function renderSpots() {
+  const el = document.getElementById('spotsList');
+  if (!spots.length) { el.innerHTML = '<div class="empty">尚無儲存地點</div>'; return; }
+  el.innerHTML = spots.map((s,i) => `
+    <div class="spot-row" onclick="loadSpot(${i})">
+      <div>
+        <div class="spot-name">⭐ ${s.name}</div>
+        <div class="spot-coord">${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}</div>
+      </div>
+      <span class="spot-del" onclick="delSpot(event,${i})">×</span>
+    </div>`).join('');
+}
+
+function loadSpot(i) {
+  const s = spots[i];
+  setTarget(s.lat, s.lon); map.setView([s.lat,s.lon],14);
+  fetchWx(s.lat,s.lon);
+  document.getElementById('locInfo').textContent = `📍 ${s.name}`;
+}
+
+function delSpot(e,i) {
+  e.stopPropagation();
+  if (!confirm('刪除此地點？')) return;
+  spots.splice(i,1);
+  try { localStorage.setItem('astro_spots', JSON.stringify(spots)); } catch(e) {}
+  renderSpots();
+}
+</script>
+</body>
+</html>
